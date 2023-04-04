@@ -59,6 +59,9 @@ static List *reparameterize_pathlist_by_child(PlannerInfo *root,
 											  RelOptInfo *child_rel);
 
 
+int top_n = 0;
+
+
 /*****************************************************************************
  *		MISC. PATH UTILITIES
  *****************************************************************************/
@@ -428,7 +431,8 @@ add_path(RelOptInfo *parent_rel, Path *new_path)
 	ListCell   *p1;
 	ListCell   *p1_prev;
 	ListCell   *p1_next;
-
+	ListCell   *plast_prev;
+	FILE *filee = fopen("record.log", "a+");
 	/*
 	 * This is a convenient place to check for query cancel --- no part of the
 	 * planner goes very long without calling add_path().
@@ -455,6 +459,7 @@ add_path(RelOptInfo *parent_rel, Path *new_path)
 		PathKeysComparison keyscmp;
 		BMS_Comparison outercmp;
 
+
 		p1_next = lnext(p1);
 
 		/*
@@ -463,6 +468,13 @@ add_path(RelOptInfo *parent_rel, Path *new_path)
 		costcmp = compare_path_costs_fuzzily(new_path, old_path,
 											 STD_FUZZ_FACTOR);
 
+		// FILE *file2 = fopen("recordx.log", "a+");
+		// fprintf(file2, "length %d\n", parent_rel->pathlist->length);
+		// fclose(file2);
+
+		bool TEST_TOP_N = true;
+
+		
 		/*
 		 * If the two paths compare differently for startup and total cost,
 		 * then we want to keep both, and we can skip comparing pathkeys and
@@ -587,15 +599,112 @@ add_path(RelOptInfo *parent_rel, Path *new_path)
 				}
 			}
 		}
-
-
 		
+
+		if (top_n > 0){
+			// insert_after = NULL;
+			// p1_prev = NULL;
+			// plast_prev = NULL;
+
+			if (parent_rel->pathlist->length < top_n){
+				// fprintf(filee, "We have %d plans already.\n", parent_rel->pathlist->length);
+				remove_old = false;
+				accept_new = true;
+				
+				// 如果new path的cost是最小的，则insert after为NULL，break之后会插入队首
+				// 一直找到第一个cost比new_path小的old，只需要insert不需要del
+				// fprintf(filee, "New plan's cost is %f \n", new_path->total_cost);
+				// fprintf(filee, "Old plan's cost is %f \n", old_path->total_cost);
+				// if (new_path->total_cost <= old_path->total_cost){
+				// 	insert_after = p1_prev;
+				// 	break;
+				// } else{
+				// 	p1_prev = p1;
+				// 	insert_after = p1_prev;
+				// 	continue;
+				// }
+			}
+			// else{
+			// 	// 此时说明pathlist长度已经是5了
+			// 	// 找到可以dominate的plan我们才accept new并delete old
+			// 	if (accept_new = false){
+			// 		continue;
+			// 	}
+			// 	else{
+			// 		if(new_path->total_cost <= old_path->total_cost){
+					
+			// 			// insert at current (after prev)
+			// 			accept_new = true;
+			// 			insert_after = p1_prev;
+
+						// // del the most right one
+						// int count = 1;
+						// ListCell   *tmp;
+						// foreach(tmp, parent_rel->pathlist){
+						// 	if (count == top_n){
+						// 		// fprintf(filee, "Have enough plan, lets delete. %f \n", new_path->total_cost);
+						// 		Path	   *del_path = (Path *) lfirst(tmp);
+						// 		parent_rel->pathlist = list_delete_cell(parent_rel->pathlist,
+						// 									tmp, plast_prev);
+						// 		if (!IsA(del_path, IndexPath))
+						// 			pfree(del_path);
+
+						// 	}
+						// 	plast_prev = tmp;
+						// 	count ++;
+						// }
+			// 			// fprintf(filee, "Delete finish %f, having %d plans now \n", new_path->total_cost, parent_rel->pathlist->length);
+			// 			fclose(filee);
+			// 			break;
+			// 		}
+			// 		else{
+			// 			p1_prev = p1;
+			// 			insert_after = p1_prev;
+			// 			continue;
+			// 		}
+			// 	}
+
+			// }
+
+
+			
+			// fprintf(filee, "BAD: NEVER BE HERE\n");
+		}
+
+
+
+
+		// FILE *fileee = fopen("record.log", "a+");
+		// fprintf(fileee, "BAD: NEVER BE HERE\n");
+		// fclose(fileee);
 
 		/*
 		 * Remove current element from pathlist if dominated by new.
 		 */
 		if (remove_old)
 		{
+
+			if (top_n > 0 && parent_rel->pathlist->length >= top_n){
+				// del the most right one
+				int count = 1;
+				ListCell   *tmp;
+				foreach(tmp, parent_rel->pathlist){
+					if (count == top_n){
+						// fprintf(filee, "Have enough plan, lets delete. %f \n", new_path->total_cost);
+						Path	   *del_path = (Path *) lfirst(tmp);
+						parent_rel->pathlist = list_delete_cell(parent_rel->pathlist,
+													tmp, plast_prev);
+						if (!IsA(del_path, IndexPath))
+							pfree(del_path);
+
+					}
+					plast_prev = tmp;
+					count ++;
+				}
+				continue;
+			}
+
+
 			parent_rel->pathlist = list_delete_cell(parent_rel->pathlist,
 													p1, p1_prev);
 
@@ -620,8 +729,8 @@ add_path(RelOptInfo *parent_rel, Path *new_path)
 		 * scanning the pathlist; we will not add new_path, and we assume
 		 * new_path cannot dominate any other elements of the pathlist.
 		 */
-		if (!accept_new)
-			break;
+		// if (!accept_new)
+		// 	break;
 	}
 
 	if (accept_new)
